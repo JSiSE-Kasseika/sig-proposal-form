@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/sig-proposal-form/static/css/main.33095838.css",
+    "main.js": "/sig-proposal-form/static/js/main.d9e861ab.js",
+    "index.html": "/sig-proposal-form/index.html",
+    "main.33095838.css.map": "/sig-proposal-form/static/css/main.33095838.css.map",
+    "main.d9e861ab.js.map": "/sig-proposal-form/static/js/main.d9e861ab.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.33095838.css",
+    "static/js/main.d9e861ab.js"
+  ]
+}
