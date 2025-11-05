@@ -317,6 +317,12 @@ const App = () => {
       if (!formData.sessionDetails.target) {
         errors.push('企画セッション詳細：実施する研究会/大会が選択されていません');
       }
+      // 全国大会が選択されている場合、全国大会を詳細で選択しているかチェック
+      if (formData.plannedSessions.national) {
+        if (formData.sessionDetails.target !== '全国大会（2026年9月12～14日）') {
+          errors.push('全国大会の企画セッションを予定している場合は、企画セッション詳細では全国大会について記載してください');
+        }
+      }
       if (!formData.sessionDetails.name) {
         errors.push('企画セッション詳細：セッション名が入力されていません');
       }
