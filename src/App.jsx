@@ -411,7 +411,7 @@ const App = () => {
     <div className="app">
       <div className="header">
         <h1>教育システム情報学会 第二種SIG提案書</h1>
-        <p>入力フォーム</p>
+        <p>作成支援システム</p>
       </div>
 
       {/* 検証エラー表示 */}
