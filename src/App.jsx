@@ -29,7 +29,8 @@ const App = () => {
       name: '',
       overview: '',
       keywords: '',
-      presenters: ''
+      presenters: '',
+      organizers: '' // 全国大会選択時のみ使用
     },
     schedule: [
       { month: '4月', activities: '' },
@@ -162,7 +163,17 @@ const App = () => {
 
   // JSONエクスポート
   const exportData = () => {
-    const dataStr = JSON.stringify(formData, null, 2);
+    // エクスポート用にセッション名にプレフィックスを付けたデータを作成
+    const exportFormData = {
+      ...formData,
+      sessionDetails: {
+        ...formData.sessionDetails,
+        name: formData.sessionDetails.name
+          ? `SIG-${formData.sigAbbreviation}：${formData.sessionDetails.name}`
+          : ''
+      }
+    };
+    const dataStr = JSON.stringify(exportFormData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = `sig-proposal-${new Date().toISOString().split('T')[0]}.json`;
 
@@ -331,6 +342,10 @@ const App = () => {
       }
       if (!formData.sessionDetails.presenters) {
         errors.push('企画セッション詳細：発表者リストが入力されていません');
+      }
+      // 全国大会を選択した場合、オーガナイザの入力をチェック
+      if (formData.sessionDetails.target === '全国大会（2026年9月12～14日）' && !formData.sessionDetails.organizers) {
+        errors.push('企画セッション詳細：全国大会を選択した場合はオーガナイザの入力が必要です');
       }
     }
 
@@ -756,6 +771,24 @@ const App = () => {
                 全国大会の企画セッションを予定していない場合は、任意の研究会の企画について記載してください。
               </div>
 
+              {/* 全国大会選択時の重要な注意 */}
+              {formData.plannedSessions.national && (
+                <div className="note" style={{
+                  marginBottom: '15px',
+                  background: '#fff3cd',
+                  borderLeft: '4px solid #ffc107',
+                  padding: '15px',
+                  fontWeight: 'bold'
+                }}>
+                  <strong style={{ color: '#856404', fontSize: '14px' }}>【重要】全国大会を選択される場合へ</strong>
+                  <p style={{ marginTop: '10px', lineHeight: '1.6', color: '#856404' }}>
+                    SIG採択決定後に、ここで記載した内容をそのまま全国大会の企画セッション応募フォームに入力してください。
+                    企画セッションへの応募は、SIG採択決定前には行わないでください。
+                    十分に推敲の上、慎重かつ正確な入力をお願い致します。
+                  </p>
+                </div>
+              )}
+
               <div className="form-group">
                 <label>どの研究会/大会で実施するか</label>
                 <select
@@ -773,12 +806,21 @@ const App = () => {
 
               <div className="form-group">
                 <label>セッション名（案）</label>
-                <input
-                  type="text"
-                  value={formData.sessionDetails.name}
-                  onChange={(e) => handleNestedInputChange('sessionDetails', 'name', e.target.value)}
-                  placeholder="例：教育システム情報学の展望と課題"
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap', color: '#666' }}>
+                    SIG-{formData.sigAbbreviation || '___'}：
+                  </span>
+                  <input
+                    type="text"
+                    value={formData.sessionDetails.name}
+                    onChange={(e) => handleNestedInputChange('sessionDetails', 'name', e.target.value)}
+                    placeholder="例：教育システム情報学の展望と課題"
+                    style={{ flex: 1 }}
+                  />
+                </div>
+                <div className="note" style={{ marginTop: '5px' }}>
+                  セッション名には自動的に「SIG-{formData.sigAbbreviation || '略称'}：」が付与されます
+                </div>
               </div>
 
               <div className="form-group">
@@ -814,6 +856,20 @@ const App = () => {
                 />
                 <div className="note">提案時点の見込みで構いません</div>
               </div>
+
+              {/* 全国大会選択時のみオーガナイザ入力欄を表示 */}
+              {formData.sessionDetails.target === '全国大会（2026年9月12～14日）' && (
+                <div className="form-group">
+                  <label>オーガナイザ</label>
+                  <textarea
+                    value={formData.sessionDetails.organizers}
+                    onChange={(e) => handleNestedInputChange('sessionDetails', 'organizers', e.target.value)}
+                    placeholder="氏名1（所属機関1），氏名2（所属機関2），氏名3（所属機関3）"
+                    style={{ minHeight: '80px' }}
+                  />
+                  <div className="note">全国大会の企画セッションのオーガナイザを記載してください。筆頭幹事を必ず含めてください。</div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1015,10 +1071,13 @@ const App = () => {
             <div style={{ background: '#f9f9f9', padding: '15px', border: '1px solid #ddd', marginTop: '10px' }}>
               <h3 style={{ fontSize: '12pt', marginBottom: '10px' }}>企画セッション詳細</h3>
               <p><strong>実施:</strong> {formData.sessionDetails.target}</p>
-              <p><strong>セッション名:</strong> {formData.sessionDetails.name}</p>
+              <p><strong>セッション名:</strong> SIG-{formData.sigAbbreviation}：{formData.sessionDetails.name}</p>
               <p style={{ textAlign: 'justify', whiteSpace: 'pre-wrap' }}><strong>概要:</strong> {formData.sessionDetails.overview}</p>
               <p><strong>キーワード:</strong> {formData.sessionDetails.keywords}</p>
               <p><strong>発表者:</strong> {formData.sessionDetails.presenters}</p>
+              {formData.sessionDetails.target === '全国大会（2026年9月12～14日）' && formData.sessionDetails.organizers && (
+                <p><strong>オーガナイザ:</strong> {formData.sessionDetails.organizers}</p>
+              )}
             </div>
           )}
         </div>
