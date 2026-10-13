@@ -1,52 +1,196 @@
 import React, { useState, useEffect } from "react";
 
+// 提案・計画の対象年度
+const FISCAL_YEAR = 2027;
+
+const SESSION_OPTIONS = [
+  { key: "spring", label: `春季研究会（${FISCAL_YEAR}年5月頃予定）` },
+  { key: "summer", label: `夏季研究会（${FISCAL_YEAR}年7月頃予定）` },
+  { key: "national", label: `全国大会（${FISCAL_YEAR}年8月28～30日）` },
+  { key: "autumn", label: `秋季研究会（${FISCAL_YEAR}年11月頃予定）` },
+  { key: "winter", label: `冬季研究会（${FISCAL_YEAR + 1}年1月頃予定）` },
+  { key: "special", label: `特別研究会（${FISCAL_YEAR + 1}年3月頃予定）` },
+];
+
+const getSessionLabel = (key) => SESSION_OPTIONS.find((o) => o.key === key)?.label || "";
+
+// 継続の対象となる既存SIG
+const EXISTING_SIGS = [
+  { abbreviation: "AID", nameJa: "アカデミックインテグリティと学習デザイン" },
+  { abbreviation: "DEPR", nameJa: "教育実践研究のデザイン" },
+  { abbreviation: "DTCI", nameJa: "地域課題探究DX" },
+  { abbreviation: "ERS", nameJa: "防災・安全教育" },
+  { abbreviation: "RBL", nameJa: "再構成学習" },
+  { abbreviation: "PS", nameJa: "心理的安全性" },
+  { abbreviation: "SLAM", nameJa: "認知スキーマ・学習活動モデリング" },
+];
+
+// 予算案の費目
+const BUDGET_CATEGORIES = [
+  {
+    key: "meeting",
+    label: "会議費",
+    example: "会場利用料、貸会議室利用料など",
+    rationaleExample: "例：公開ワークショップの会場利用料（半日×1回）",
+  },
+  {
+    key: "honorarium",
+    label: "謝金",
+    example: "講師への謝金など（交通費・宿泊費を含む）※JSiSE会員への謝金支払いは不可",
+    rationaleExample: "例：招待講演の講師謝金（非会員1名、交通費を含む）",
+  },
+  {
+    key: "travel",
+    label: "旅費交通費",
+    example: "調査のための交通費・宿泊費（日当はなし）※全国大会や研究会への旅費交通費は不可",
+    rationaleExample: "例：先進事例の訪問調査の交通費・宿泊費（2名×1回）",
+  },
+  {
+    key: "communication",
+    label: "通信運搬費",
+    example: "郵送料など",
+    rationaleExample: "例：ワークショップ資料・機材の郵送料（2回分）",
+  },
+  {
+    key: "supplies",
+    label: "消耗品費",
+    example: "消耗品",
+    rationaleExample: "例：ワークショップ用の付箋・模造紙・印刷用紙",
+  },
+  {
+    key: "misc",
+    label: "雑費",
+    example: "上の費目に含まれないもの",
+    rationaleExample: "例：謝金の振込手数料",
+  },
+];
+
+// 予算総額の上限（千円）
+const BUDGET_LIMIT = 200;
+
+const initialFormData = {
+  applicationType: "", // 'new'（新規申請） or 'continuation'（継続SIGの次年度活動計画）
+  submissionDate: "",
+  sigNameJa: "",
+  sigNameEn: "",
+  sigAbbreviation: "",
+  leadSecretary: { name: "", affiliation: "", email: "", memberId: "" },
+  proposers: [
+    { role: "幹事", name: "", affiliation: "", email: "", memberId: "" },
+    { role: "幹事", name: "", affiliation: "", email: "", memberId: "" },
+  ],
+  overview: "",
+  questions: [""],
+  expectedEffects: "",
+  firstClassPromotion: "", // '希望する' or '希望しない'（対象年度の次の年度の第一種希望）
+  nextYearClass: "", // '第一種' or '第二種'（継続のみ。対象年度の種別）
+  plannedSessions: {
+    spring: false,
+    summer: false,
+    national: false,
+    autumn: false,
+    winter: false,
+    special: false,
+  },
+  sessionDetails: {
+    target: "", // SESSION_OPTIONSのkey
+    name: "",
+    overview: "",
+    keywords: "",
+    presenters: "",
+    organizers: "", // 全国大会選択時のみ使用
+  },
+  schedule: [
+    { month: "4月", activities: "" },
+    { month: "6月", activities: "" },
+    { month: "8月", activities: "" },
+    { month: "12月", activities: "" },
+    { month: "3月", activities: "" },
+  ],
+  // 予算案（継続かつ第一種のみ）。金額は千円単位
+  budget: Object.fromEntries(BUDGET_CATEGORIES.map((c) => [c.key, { amount: "", rationale: "" }])),
+};
+
+// 保存・インポートされたデータを現在の形式に揃える（旧形式のデータにも対応）
+const normalizeFormData = (data) => {
+  const merged = {
+    ...initialFormData,
+    ...data,
+    leadSecretary: { ...initialFormData.leadSecretary, ...data.leadSecretary },
+    plannedSessions: { ...initialFormData.plannedSessions, ...data.plannedSessions },
+    sessionDetails: { ...initialFormData.sessionDetails, ...data.sessionDetails },
+    budget: Object.fromEntries(
+      BUDGET_CATEGORIES.map((c) => [
+        c.key,
+        { ...initialFormData.budget[c.key], ...(data.budget || {})[c.key] },
+      ]),
+    ),
+  };
+
+  // 旧形式では役割「メンバー」だったものを「運営委員」に読み替える
+  merged.proposers = merged.proposers.map((p) => ({
+    ...p,
+    role: p.role === "メンバー" ? "運営委員" : p.role,
+  }));
+
+  // 実施する研究会/大会がラベルで保存されている場合はkeyに読み替える
+  const target = merged.sessionDetails.target;
+  if (target && !SESSION_OPTIONS.some((o) => o.key === target)) {
+    const name = target.split("（")[0];
+    const option = SESSION_OPTIONS.find((o) => o.label.startsWith(name));
+    merged.sessionDetails.target = option ? option.key : "";
+  }
+
+  // エクスポート時に付与したセッション名のプレフィックスを取り除く
+  const prefix = `SIG-${merged.sigAbbreviation}：`;
+  if (merged.sessionDetails.name.startsWith(prefix)) {
+    merged.sessionDetails.name = merged.sessionDetails.name.slice(prefix.length);
+  }
+
+  return merged;
+};
+
 const App = () => {
   const [validationErrors, setValidationErrors] = useState([]);
-  const [formData, setFormData] = useState({
-    submissionDate: "",
-    sigNameJa: "",
-    sigNameEn: "",
-    sigAbbreviation: "",
-    leadSecretary: { name: "", affiliation: "", email: "", memberId: "" },
-    proposers: [
-      { role: "幹事", name: "", affiliation: "", email: "", memberId: "" },
-      { role: "幹事", name: "", affiliation: "", email: "", memberId: "" },
-    ],
-    overview: "",
-    questions: [""],
-    expectedEffects: "",
-    firstClassPromotion: "", // '希望する' or '希望しない'
-    plannedSessions: {
-      spring: false,
-      summer: false,
-      national: false,
-      autumn: false,
-      winter: false,
-      special: false,
-    },
-    sessionDetails: {
-      target: "",
-      name: "",
-      overview: "",
-      keywords: "",
-      presenters: "",
-      organizers: "", // 全国大会選択時のみ使用
-    },
-    schedule: [
-      { month: "4月", activities: "" },
-      { month: "6月", activities: "" },
-      { month: "9月", activities: "" },
-      { month: "12月", activities: "" },
-      { month: "3月", activities: "" },
-    ],
-  });
+  const [formData, setFormData] = useState(initialFormData);
+
+  const isContinuation = formData.applicationType === "continuation";
+  const selectedSig = EXISTING_SIGS.find((sig) => sig.abbreviation === formData.sigAbbreviation);
+  const isFirstClassPlan = isContinuation && formData.nextYearClass === "第一種";
+  const documentTitle = isContinuation
+    ? `教育システム情報学会 SIG ${FISCAL_YEAR}年度活動計画書`
+    : "教育システム情報学会 第二種SIG提案書";
+  const dateLabel = isContinuation ? "提出日" : "提案日";
+  const sectionNo = isContinuation
+    ? { name: 1, submitter: 2, sigClass: 3, sessions: 4, schedule: 5, budget: 6 }
+    : {
+        name: 1,
+        proposers: 2,
+        overview: 3,
+        questions: 4,
+        effects: 5,
+        sigClass: 6,
+        sessions: 7,
+        schedule: 8,
+      };
+
+  // 予算総額（千円）
+  const budgetTotal = BUDGET_CATEGORIES.reduce(
+    (sum, c) => sum + (parseInt(formData.budget[c.key].amount, 10) || 0),
+    0,
+  );
+
+  // 全国大会1回＋研究会2回以上（第一種SIGの条件）を満たす計画かどうか
+  const researchMeetingCount = ["spring", "summer", "autumn", "winter", "special"].filter(
+    (key) => formData.plannedSessions[key],
+  ).length;
 
   // ローカルストレージから読み込み
   useEffect(() => {
     const saved = localStorage.getItem("sigProposalData");
     if (saved) {
       try {
-        setFormData(JSON.parse(saved));
+        setFormData(normalizeFormData(JSON.parse(saved)));
       } catch (e) {
         console.error("データの読み込みに失敗しました", e);
       }
@@ -83,7 +227,7 @@ const App = () => {
       ...prev,
       proposers: [
         ...prev.proposers,
-        { role: "メンバー", name: "", affiliation: "", email: "", memberId: "" },
+        { role: "運営委員", name: "", affiliation: "", email: "", memberId: "" },
       ],
     }));
   };
@@ -164,21 +308,54 @@ const App = () => {
     }));
   };
 
+  // 予算案管理（金額は半角数字のみ）
+  const updateBudget = (key, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      budget: {
+        ...prev.budget,
+        [key]: {
+          ...prev.budget[key],
+          [field]: field === "amount" ? value.replace(/[^0-9]/g, "") : value,
+        },
+      },
+    }));
+  };
+
   // JSONエクスポート
   const exportData = () => {
-    // エクスポート用にセッション名にプレフィックスを付けたデータを作成
+    // エクスポート用にセッション名にプレフィックスを付け、実施する研究会/大会をラベルにしたデータを作成
     const exportFormData = {
       ...formData,
       sessionDetails: {
         ...formData.sessionDetails,
+        target: getSessionLabel(formData.sessionDetails.target),
         name: formData.sessionDetails.name
           ? `SIG-${formData.sigAbbreviation}：${formData.sessionDetails.name}`
           : "",
       },
     };
+    // 申請種別で使用しない項目は出力しない
+    if (isContinuation) {
+      ["sigNameEn", "proposers", "overview", "questions", "expectedEffects"].forEach(
+        (field) => delete exportFormData[field],
+      );
+      exportFormData.leadSecretary = {
+        name: formData.leadSecretary.name,
+        email: formData.leadSecretary.email,
+      };
+      if (isFirstClassPlan) {
+        exportFormData.budgetTotal = budgetTotal;
+      } else {
+        delete exportFormData.budget;
+      }
+    } else {
+      delete exportFormData.nextYearClass;
+      delete exportFormData.budget;
+    }
     const dataStr = JSON.stringify(exportFormData, null, 2);
     const dataUri = "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
-    const exportFileDefaultName = `sig-proposal-${new Date().toISOString().split("T")[0]}.json`;
+    const exportFileDefaultName = `sig-${isContinuation ? "plan" : "proposal"}-${new Date().toISOString().split("T")[0]}.json`;
 
     const linkElement = document.createElement("a");
     linkElement.setAttribute("href", dataUri);
@@ -194,7 +371,7 @@ const App = () => {
       reader.onload = (e) => {
         try {
           const imported = JSON.parse(e.target.result);
-          setFormData(imported);
+          setFormData(normalizeFormData(imported));
           alert("データを読み込みました");
         } catch (error) {
           alert("ファイルの読み込みに失敗しました");
@@ -215,20 +392,27 @@ const App = () => {
   // データ検証
   const validateData = () => {
     const errors = [];
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    // 提案日
+    // 提案日・提出日
     if (!formData.submissionDate) {
-      errors.push("提案日が入力されていません");
+      errors.push(`${dateLabel}が入力されていません`);
     }
 
-    // SIG名称
-    if (!formData.sigNameJa) {
+    // SIG名称（継続は既存SIGから選択）
+    if (isContinuation) {
+      if (!selectedSig) {
+        errors.push("SIGが選択されていません");
+      }
+    } else if (!formData.sigNameJa) {
       errors.push("正式名称（和）が入力されていません");
     }
-    if (!formData.sigNameEn) {
+    if (!isContinuation && !formData.sigNameEn) {
       errors.push("正式名称（英）が入力されていません");
     }
-    if (!formData.sigAbbreviation) {
+    if (isContinuation) {
+      // 略称は選択したSIGで決まる
+    } else if (!formData.sigAbbreviation) {
       errors.push("略称が入力されていません");
     } else {
       // 略称は半角アルファベット2～5文字
@@ -242,69 +426,85 @@ const App = () => {
     if (!formData.leadSecretary.name) {
       errors.push("筆頭幹事の氏名が入力されていません");
     }
-    if (!formData.leadSecretary.memberId) {
-      errors.push("筆頭幹事の会員番号が入力されていません");
-    }
-    if (!formData.leadSecretary.affiliation) {
-      errors.push("筆頭幹事の所属が入力されていません");
+    if (!isContinuation) {
+      if (!formData.leadSecretary.memberId) {
+        errors.push("筆頭幹事の会員番号が入力されていません");
+      }
+      if (!formData.leadSecretary.affiliation) {
+        errors.push("筆頭幹事の所属が入力されていません");
+      }
     }
     if (!formData.leadSecretary.email) {
       errors.push("筆頭幹事のメールアドレスが入力されていません");
-    } else {
-      // メールアドレス形式チェック
-      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailPattern.test(formData.leadSecretary.email)) {
-        errors.push("筆頭幹事のメールアドレスの形式が正しくありません");
-      }
+    } else if (!emailPattern.test(formData.leadSecretary.email)) {
+      errors.push("筆頭幹事のメールアドレスの形式が正しくありません");
     }
 
-    // 提案者（筆頭幹事以外）
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    formData.proposers.forEach((proposer, index) => {
-      const label = proposer.name
-        ? `${proposer.role}（${proposer.name}）`
-        : `${proposer.role}（${index + 1}人目）`;
-      if (!proposer.name) {
-        errors.push(`${label}の氏名が入力されていません`);
+    if (isContinuation) {
+      // 次年度の種別
+      if (!formData.nextYearClass) {
+        errors.push(`${FISCAL_YEAR}年度の種別（第一種／第二種）を選択してください`);
       }
-      if (!proposer.memberId) {
-        errors.push(`${label}の会員番号が入力されていません`);
+      // 次々年度の第一種SIG希望
+      if (!formData.firstClassPromotion) {
+        errors.push(
+          `${FISCAL_YEAR + 1}年度に第一種SIGとして活動することを希望するか選択してください`,
+        );
       }
-      if (!proposer.affiliation) {
-        errors.push(`${label}の所属が入力されていません`);
-      }
-      if (proposer.role === "幹事") {
-        if (!proposer.email) {
-          errors.push(`${label}のメールアドレスが入力されていません`);
-        } else if (!emailPattern.test(proposer.email)) {
+    } else {
+      // 提案者（筆頭幹事以外）
+      formData.proposers.forEach((proposer, index) => {
+        const label = proposer.name
+          ? `${proposer.role}（${proposer.name}）`
+          : `${proposer.role}（${index + 1}人目）`;
+        if (!proposer.name) {
+          errors.push(`${label}の氏名が入力されていません`);
+        }
+        if (!proposer.memberId) {
+          errors.push(`${label}の会員番号が入力されていません`);
+        }
+        if (!proposer.affiliation) {
+          errors.push(`${label}の所属が入力されていません`);
+        }
+        if (proposer.role === "幹事") {
+          if (!proposer.email) {
+            errors.push(`${label}のメールアドレスが入力されていません`);
+          } else if (!emailPattern.test(proposer.email)) {
+            errors.push(`${label}のメールアドレスの形式が正しくありません`);
+          }
+        }
+        // 運営委員でもメールアドレスが入力されている場合は形式チェック
+        if (proposer.role === "運営委員" && proposer.email && !emailPattern.test(proposer.email)) {
           errors.push(`${label}のメールアドレスの形式が正しくありません`);
         }
+      });
+
+      // 幹事は1～3名
+      const secretaryCount = formData.proposers.filter((p) => p.role === "幹事").length;
+      if (secretaryCount < 1 || secretaryCount > 3) {
+        errors.push("幹事は1名以上3名以下で設定してください（筆頭幹事を除く）");
       }
-      // メンバーでもメールアドレスが入力されている場合は形式チェック
-      if (proposer.role === "メンバー" && proposer.email && !emailPattern.test(proposer.email)) {
-        errors.push(`${label}のメールアドレスの形式が正しくありません`);
+
+      // 研究テーマの概要
+      if (!formData.overview || formData.overview.trim().length === 0) {
+        errors.push("研究テーマの概要が入力されていません");
       }
-    });
 
-    // 研究テーマの概要
-    if (!formData.overview || formData.overview.trim().length === 0) {
-      errors.push("研究テーマの概要が入力されていません");
-    }
+      // 学術的問い
+      const validQuestions = formData.questions.filter((q) => q.trim().length > 0);
+      if (validQuestions.length === 0) {
+        errors.push("学術的「問い」が1つも入力されていません");
+      }
 
-    // 学術的問い
-    const validQuestions = formData.questions.filter((q) => q.trim().length > 0);
-    if (validQuestions.length === 0) {
-      errors.push("学術的「問い」が1つも入力されていません");
-    }
+      // 期待される効果
+      if (!formData.expectedEffects || formData.expectedEffects.trim().length === 0) {
+        errors.push("期待される効果が入力されていません");
+      }
 
-    // 期待される効果
-    if (!formData.expectedEffects || formData.expectedEffects.trim().length === 0) {
-      errors.push("期待される効果が入力されていません");
-    }
-
-    // 第一種SIG希望
-    if (!formData.firstClassPromotion) {
-      errors.push("第一種SIGとして活動することを希望するか選択してください");
+      // 第一種SIG希望
+      if (!formData.firstClassPromotion) {
+        errors.push("第一種SIGとして活動することを希望するか選択してください");
+      }
     }
 
     // 企画セッション
@@ -317,21 +517,15 @@ const App = () => {
     if (formData.firstClassPromotion === "希望する") {
       // 全国大会が選択されているかチェック
       if (!formData.plannedSessions.national) {
-        errors.push("第一種SIG希望の場合、全国大会における企画セッションの実施が必要です");
+        errors.push(
+          `${FISCAL_YEAR + 1}年度の第一種SIG希望の場合、全国大会における企画セッションの実施が必要です`,
+        );
       }
 
       // 研究会が2回以上選択されているかチェック
-      const researchMeetingCount = [
-        formData.plannedSessions.spring,
-        formData.plannedSessions.summer,
-        formData.plannedSessions.autumn,
-        formData.plannedSessions.winter,
-        formData.plannedSessions.special,
-      ].filter(Boolean).length;
-
       if (researchMeetingCount < 2) {
         errors.push(
-          "第一種SIG希望の場合、研究会における企画セッションを2回以上実施する必要があります",
+          `${FISCAL_YEAR + 1}年度の第一種SIG希望の場合、研究会における企画セッションを2回以上実施する必要があります`,
         );
       }
     }
@@ -340,10 +534,11 @@ const App = () => {
     if (hasSelectedSession) {
       if (!formData.sessionDetails.target) {
         errors.push("企画セッション詳細：実施する研究会/大会が選択されていません");
-      } else if (
-        formData.plannedSessions.national &&
-        formData.sessionDetails.target !== "全国大会（2026年9月12～14日）"
-      ) {
+      } else if (!formData.plannedSessions[formData.sessionDetails.target]) {
+        errors.push(
+          "企画セッション詳細：実施予定として選択していない研究会/大会が指定されています",
+        );
+      } else if (formData.plannedSessions.national && formData.sessionDetails.target !== "national") {
         // 全国大会が選択されている場合、全国大会を詳細で選択しているかチェック
         errors.push(
           "全国大会の企画セッションを予定している場合は、企画セッション詳細では全国大会について記載してください",
@@ -365,10 +560,7 @@ const App = () => {
         errors.push("企画セッション詳細：発表者リストが入力されていません");
       }
       // 全国大会を選択した場合、オーガナイザの入力をチェック
-      if (
-        formData.sessionDetails.target === "全国大会（2026年9月12～14日）" &&
-        !formData.sessionDetails.organizers
-      ) {
+      if (formData.sessionDetails.target === "national" && !formData.sessionDetails.organizers) {
         errors.push("企画セッション詳細：全国大会を選択した場合はオーガナイザの入力が必要です");
       }
     }
@@ -377,6 +569,21 @@ const App = () => {
     const validSchedule = formData.schedule.filter((s) => s.month && s.activities);
     if (validSchedule.length === 0) {
       errors.push("年間活動スケジュールが1つも入力されていません");
+    }
+
+    // 予算案（第一種・第一種見込みのみ）
+    if (isFirstClassPlan) {
+      BUDGET_CATEGORIES.forEach((c) => {
+        const item = formData.budget[c.key];
+        if ((parseInt(item.amount, 10) || 0) > 0 && !item.rationale.trim()) {
+          errors.push(`予算案：${c.label}の予算の根拠が入力されていません`);
+        }
+      });
+      if (budgetTotal > BUDGET_LIMIT) {
+        errors.push(
+          `予算案：予算総額が上限の${BUDGET_LIMIT / 10}万円（入力値で${BUDGET_LIMIT}）を超えています`,
+        );
+      }
     }
 
     setValidationErrors(errors);
@@ -401,15 +608,6 @@ const App = () => {
     }, 100);
   };
 
-  const sessionOptions = [
-    { key: "spring", label: "春季研究会（2026年5月頃予定）" },
-    { key: "summer", label: "夏季研究会（2026年7月頃予定）" },
-    { key: "national", label: "全国大会（2026年9月12～14日）" },
-    { key: "autumn", label: "秋季研究会（2026年11月頃予定）" },
-    { key: "winter", label: "冬季研究会（2027年1月頃予定）" },
-    { key: "special", label: "特別研究会（2027年3月頃予定）" },
-  ];
-
   const getCharCountClass = (current, max) => {
     if (current > max) return "char-count warning";
     return "char-count";
@@ -422,7 +620,7 @@ const App = () => {
       "5月": "例：春季研究会にて企画セッション実施",
       "6月": "例：運営委員会，研究テーマの検討",
       "7月": "例：夏季研究会にて企画セッション実施",
-      "9月": "例：全国大会にて企画セッション実施",
+      "8月": "例：全国大会にて企画セッション実施",
       "11月": "例：秋季研究会にて企画セッション実施",
       "12月": "例：運営委員会，年度活動の振り返り",
       "1月": "例：冬季研究会にて企画セッション実施",
@@ -431,10 +629,47 @@ const App = () => {
     return placeholders[month] || "例：活動内容を入力してください";
   };
 
+  // ラジオボタンの選択肢
+  const renderRadioOption = (field, value, text) => {
+    const checked = formData[field] === value;
+    return (
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          cursor: "pointer",
+          padding: "10px",
+          background: checked ? "#e3f2fd" : "#f8f9fa",
+          borderRadius: "4px",
+          border: checked ? "2px solid #2196f3" : "1px solid #ddd",
+        }}
+      >
+        <input
+          type="radio"
+          name={field}
+          value={value}
+          checked={checked}
+          onChange={(e) => handleInputChange(field, e.target.value)}
+          style={{ marginRight: "10px", width: "18px", height: "18px", cursor: "pointer" }}
+        />
+        <span style={{ fontWeight: checked ? "bold" : "normal" }}>{text}</span>
+      </label>
+    );
+  };
+
+  const printHeadingStyle = {
+    fontSize: "14pt",
+    borderBottom: "2px solid #333",
+    paddingBottom: "5px",
+    marginBottom: "10px",
+  };
+
   return (
     <div className="app">
       <div className="header">
-        <h1>教育システム情報学会 第二種SIG提案書</h1>
+        <h1>
+          {formData.applicationType ? documentTitle : "教育システム情報学会 SIG提案書・活動計画書"}
+        </h1>
         <p>作成支援システム</p>
       </div>
 
@@ -469,11 +704,74 @@ const App = () => {
         </div>
       )}
 
+      {/* 申請種別の選択 */}
+      {!formData.applicationType && (
+        <div className="form-container">
+          <div className="section">
+            <h2 className="section-title">申請の種別を選択してください</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => handleInputChange("applicationType", "new")}
+              >
+                新規申請（第二種SIGの提案）
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => handleInputChange("applicationType", "continuation")}
+              >
+                継続（既存SIGの{FISCAL_YEAR}年度活動計画）
+              </button>
+            </div>
+            <div className="note" style={{ marginTop: "15px" }}>
+              新たにSIGを立ち上げる場合は「新規申請」を、すでに活動しているSIG（第一種・第二種）が
+              {FISCAL_YEAR}
+              年度も活動を継続する場合は「継続」を選択してください。以前エクスポートしたJSONファイルは、種別を選択したあとに「JSONからインポート」で読み込めます。
+            </div>
+          </div>
+        </div>
+      )}
+
+      {formData.applicationType && (
       <div className="form-container">
-        {/* 提案日 */}
+        {/* 申請種別 */}
+        <div className="section">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+            }}
+          >
+            <div>
+              <strong>申請種別：</strong>
+              {isContinuation
+                ? `継続（既存SIGの${FISCAL_YEAR}年度活動計画）`
+                : "新規申請（第二種SIGの提案）"}
+            </div>
+            <button
+              className="btn btn-secondary btn-small"
+              onClick={() => {
+                setValidationErrors([]);
+                handleInputChange("applicationType", "");
+              }}
+            >
+              種別を選び直す
+            </button>
+          </div>
+          {isContinuation && (
+            <div className="note">
+              継続そのものについての申請は不要です。{FISCAL_YEAR}
+              年度の活動計画のみを記入してください。SIGの概要や幹事団・運営委員を改めて記入する必要はありません。
+            </div>
+          )}
+        </div>
+
+        {/* 提案日・提出日 */}
         <div className="section">
           <div className="form-group">
-            <label>提案日</label>
+            <label>{dateLabel}</label>
             <input
               type="date"
               value={formData.submissionDate}
@@ -485,9 +783,33 @@ const App = () => {
         {/* 1. SIGの名称 */}
         <div className="section">
           <h2 className="section-title">
-            <span className="section-number">1</span>
+            <span className="section-number">{sectionNo.name}</span>
             SIGの名称
           </h2>
+          {isContinuation ? (
+            <div className="form-group">
+              <label>活動計画を提出するSIG</label>
+              <select
+                value={selectedSig ? selectedSig.abbreviation : ""}
+                onChange={(e) => {
+                  const sig = EXISTING_SIGS.find((item) => item.abbreviation === e.target.value);
+                  setFormData((prev) => ({
+                    ...prev,
+                    sigAbbreviation: sig ? sig.abbreviation : "",
+                    sigNameJa: sig ? sig.nameJa : "",
+                  }));
+                }}
+              >
+                <option value="">選択してください</option>
+                {EXISTING_SIGS.map((sig) => (
+                  <option key={sig.abbreviation} value={sig.abbreviation}>
+                    SIG-{sig.abbreviation}：{sig.nameJa}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
           <div className="form-group">
             <label>正式名称（和）</label>
             <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
@@ -541,12 +863,45 @@ const App = () => {
             </div>
             <div className="note">略称は半角アルファベット2～5文字で設定してください</div>
           </div>
+            </>
+          )}
         </div>
 
+        {isContinuation ? (
+          <div className="section">
+            <h2 className="section-title">
+              <span className="section-number">{sectionNo.submitter}</span>
+              提出者（筆頭幹事）
+            </h2>
+            <div className="form-group">
+              <label>氏名</label>
+              <input
+                type="text"
+                value={formData.leadSecretary.name}
+                onChange={(e) => updateLeadSecretary("name", e.target.value)}
+                placeholder="山田太郎"
+              />
+            </div>
+            <div className="form-group">
+              <label>メールアドレス</label>
+              <input
+                type="email"
+                value={formData.leadSecretary.email}
+                onChange={(e) => updateLeadSecretary("email", e.target.value)}
+                placeholder="example@university.ac.jp"
+                title="正しいメールアドレス形式で入力してください"
+              />
+            </div>
+            <div className="note">
+              幹事団・運営委員に変更がある場合は、年度末の活動報告書または随時の届出にて研究活性化委員会に報告してください。
+            </div>
+          </div>
+        ) : (
+          <>
         {/* 2. 提案者 */}
         <div className="section">
           <h2 className="section-title">
-            <span className="section-number">2</span>
+            <span className="section-number">{sectionNo.proposers}</span>
             提案者
           </h2>
           <div className="table-container">
@@ -604,7 +959,7 @@ const App = () => {
                     <span style={{ fontSize: "12px", color: "#999" }}>固定</span>
                   </td>
                 </tr>
-                {/* 幹事・メンバー */}
+                {/* 幹事・運営委員 */}
                 {formData.proposers.map((proposer, index) => (
                   <tr key={index}>
                     <td>
@@ -613,7 +968,7 @@ const App = () => {
                         onChange={(e) => updateProposer(index, "role", e.target.value)}
                       >
                         <option value="幹事">幹事</option>
-                        <option value="メンバー">メンバー</option>
+                        <option value="運営委員">運営委員</option>
                       </select>
                     </td>
                     <td>
@@ -667,14 +1022,14 @@ const App = () => {
             + 提案者を追加
           </button>
           <div className="note">
-            筆頭幹事1名と幹事・メンバー2名以上（合計3名以上）が必要です。メールアドレスは、筆頭幹事および幹事のみで構いません。
+            筆頭幹事1名と幹事・運営委員2名以上（合計3名以上）が必要です。幹事は1～3名としてください。筆頭幹事・幹事は正会員、運営委員は正会員または学生会員であることが必要です。メールアドレスは、筆頭幹事および幹事のみで構いません。SIGメンバーは採択後に別途フォームで登録するため、ここに記載する必要はありません。
           </div>
         </div>
 
         {/* 3. 研究テーマの概要 */}
         <div className="section">
           <h2 className="section-title">
-            <span className="section-number">3</span>
+            <span className="section-number">{sectionNo.overview}</span>
             本SIGにおける研究テーマの概要
           </h2>
           <div className="form-group">
@@ -694,7 +1049,7 @@ const App = () => {
         {/* 4. 学術的「問い」 */}
         <div className="section">
           <h2 className="section-title">
-            <span className="section-number">4</span>
+            <span className="section-number">{sectionNo.questions}</span>
             本SIGテーマのもとで共有したい学術的「問い」の例
           </h2>
           {formData.questions.map((question, index) => (
@@ -727,7 +1082,7 @@ const App = () => {
         {/* 5. 期待される効果 */}
         <div className="section">
           <h2 className="section-title">
-            <span className="section-number">5</span>
+            <span className="section-number">{sectionNo.effects}</span>
             本SIGの活動によって、本学会において期待される効果
           </h2>
           <div className="form-group">
@@ -743,93 +1098,118 @@ const App = () => {
           </div>
         </div>
 
-        {/* 6. 第一種SIG希望 */}
-        <div className="section">
-          <h2 className="section-title">
-            <span className="section-number">6</span>
-            今回提案する2026年度の次の年度（2027年度）から第一種SIGとして活動することを希望しますか？
-          </h2>
-          <div className="note" style={{ marginBottom: "15px" }}>
-            ※希望する場合は、2026年度内に、全国大会における企画セッションを企画・実施し、かつ研究会における企画セッションを2回以上企画・実施する必要があります。
-          </div>
-          <div className="form-group">
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  cursor: "pointer",
-                  padding: "10px",
-                  background: formData.firstClassPromotion === "希望する" ? "#e3f2fd" : "#f8f9fa",
-                  borderRadius: "4px",
-                  border:
-                    formData.firstClassPromotion === "希望する"
-                      ? "2px solid #2196f3"
-                      : "1px solid #ddd",
-                }}
-              >
-                <input
-                  type="radio"
-                  name="firstClassPromotion"
-                  value="希望する"
-                  checked={formData.firstClassPromotion === "希望する"}
-                  onChange={(e) => handleInputChange("firstClassPromotion", e.target.value)}
-                  style={{ marginRight: "10px", width: "18px", height: "18px", cursor: "pointer" }}
-                />
-                <span
+          </>
+        )}
+
+        {/* 次年度の種別（継続）／第一種SIG希望（新規） */}
+        {isContinuation ? (
+          <div className="section">
+            <h2 className="section-title">
+              <span className="section-number">{sectionNo.sigClass}</span>
+              SIGの種別
+            </h2>
+            <div className="note" style={{ marginBottom: "15px" }}>
+              SIGの種別は、前年度の活動実績で決まります。{FISCAL_YEAR}年度の種別は{FISCAL_YEAR - 1}
+              年度の実績で、{FISCAL_YEAR + 1}年度の種別は{FISCAL_YEAR}
+              年度の実績（この計画書の内容）で決まるため、2つの年度についてそれぞれ回答してください。
+            </div>
+
+            <div className="form-group">
+              <label>
+                （1）{FISCAL_YEAR}年度の種別（{FISCAL_YEAR - 1}年度の実績で決まります）
+              </label>
+              <div className="note" style={{ marginBottom: "10px" }}>
+                {FISCAL_YEAR - 1}
+                年度内に、全国大会における企画セッションを実施し、かつ研究会における企画セッションを2回以上実施している場合は「第一種SIG」を選択してください。年度末までの活動により満たす見込みの場合も含みます。
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {renderRadioOption("nextYearClass", "第一種", "第一種SIG（見込みを含む）")}
+                {renderRadioOption("nextYearClass", "第二種", "第二種SIG")}
+              </div>
+              {isFirstClassPlan && (
+                <div
+                  className="note"
                   style={{
-                    fontWeight: formData.firstClassPromotion === "希望する" ? "bold" : "normal",
+                    marginTop: "10px",
+                    background: "#fff3cd",
+                    borderLeft: "4px solid #ffc107",
                   }}
                 >
-                  希望する、もしくは希望する可能性がある
-                </span>
+                  ※第一種SIG（見込みを含む）の場合は、最後の「予算案」も記入してください。
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label>
+                （2）{FISCAL_YEAR + 1}年度に第一種SIGとして活動することを希望しますか？（
+                {FISCAL_YEAR}年度の実績で決まります）
               </label>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  cursor: "pointer",
-                  padding: "10px",
-                  background: formData.firstClassPromotion === "希望しない" ? "#e3f2fd" : "#f8f9fa",
-                  borderRadius: "4px",
-                  border:
-                    formData.firstClassPromotion === "希望しない"
-                      ? "2px solid #2196f3"
-                      : "1px solid #ddd",
-                }}
-              >
-                <input
-                  type="radio"
-                  name="firstClassPromotion"
-                  value="希望しない"
-                  checked={formData.firstClassPromotion === "希望しない"}
-                  onChange={(e) => handleInputChange("firstClassPromotion", e.target.value)}
-                  style={{ marginRight: "10px", width: "18px", height: "18px", cursor: "pointer" }}
-                />
-                <span
+              <div className="note" style={{ marginBottom: "10px" }}>
+                希望する場合は、{FISCAL_YEAR}
+                年度内に、全国大会における企画セッションを実施し、かつ研究会における企画セッションを2回以上実施する必要があります。現在第一種SIGで、
+                {FISCAL_YEAR + 1}年度も第一種SIGを続けたい場合も「希望する」を選択してください。
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {renderRadioOption(
+                  "firstClassPromotion",
+                  "希望する",
+                  "希望する、もしくは希望する可能性がある",
+                )}
+                {renderRadioOption("firstClassPromotion", "希望しない", "希望することはない")}
+              </div>
+              {formData.firstClassPromotion === "希望する" && (
+                <div
+                  className="note"
                   style={{
-                    fontWeight: formData.firstClassPromotion === "希望しない" ? "bold" : "normal",
+                    marginTop: "10px",
+                    background: "#fff3cd",
+                    borderLeft: "4px solid #ffc107",
                   }}
                 >
-                  希望することはない
-                </span>
-              </label>
+                  ※以下（{sectionNo.sessions}
+                  ）の企画セッション実施予定において、全国大会を含め、かつ研究会を2回以上選択してください。
+                </div>
+              )}
             </div>
           </div>
-          {formData.firstClassPromotion === "希望する" && (
-            <div
-              className="note"
-              style={{ marginTop: "15px", background: "#fff3cd", borderLeft: "4px solid #ffc107" }}
-            >
-              ※第一種SIG希望の場合は、以下（7）の企画セッション実施予定において、全国大会を含め、かつ研究会を2回以上選択してください。
+        ) : (
+          <div className="section">
+            <h2 className="section-title">
+              <span className="section-number">{sectionNo.sigClass}</span>
+              今回提案する{FISCAL_YEAR}年度の次の年度（{FISCAL_YEAR + 1}
+              年度）から第一種SIGとして活動することを希望しますか？
+            </h2>
+            <div className="note" style={{ marginBottom: "15px" }}>
+              ※希望する場合は、{FISCAL_YEAR}
+              年度内に、全国大会における企画セッションを企画・実施し、かつ研究会における企画セッションを2回以上企画・実施する必要があります。
             </div>
-          )}
-        </div>
+            <div className="form-group">
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {renderRadioOption(
+                  "firstClassPromotion",
+                  "希望する",
+                  "希望する、もしくは希望する可能性がある",
+                )}
+                {renderRadioOption("firstClassPromotion", "希望しない", "希望することはない")}
+              </div>
+            </div>
+            {formData.firstClassPromotion === "希望する" && (
+              <div
+                className="note"
+                style={{ marginTop: "15px", background: "#fff3cd", borderLeft: "4px solid #ffc107" }}
+              >
+                ※第一種SIG希望の場合は、以下（{sectionNo.sessions}
+                ）の企画セッション実施予定において、全国大会を含め、かつ研究会を2回以上選択してください。
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 7. 企画セッション実施予定 */}
         <div className="section">
           <h2 className="section-title">
-            <span className="section-number">7</span>
+            <span className="section-number">{sectionNo.sessions}</span>
             企画セッションをどの大会・研究会で企画・実施予定か
           </h2>
           <div className="note" style={{ marginBottom: "15px" }}>
@@ -837,7 +1217,7 @@ const App = () => {
             ※研究会は2026年度から全5回の開催となります。開催月は現時点の見込みであり、今後変更になる可能性があります。
           </div>
           <div className="checkbox-group">
-            {sessionOptions.map((option) => (
+            {SESSION_OPTIONS.map((option) => (
               <div key={option.key} className="checkbox-item">
                 <input
                   type="checkbox"
@@ -875,7 +1255,9 @@ const App = () => {
                     【重要】全国大会を選択される場合へ
                   </strong>
                   <p style={{ marginTop: "10px", lineHeight: "1.6", color: "#856404" }}>
-                    SIGが採択された場合は、全国大会の企画セッションにおけるセッション名、セッションの概要はここで記載したものを原則そのまま記載して、研究活性化委員会に別途提出していただきます。
+                    {isContinuation
+                      ? "全国大会の企画セッションは、ここで記載したセッション名、セッションの概要を原則そのまま用いて、研究活性化委員会がとりまとめて全国大会プログラム部会へ申請します。"
+                      : "SIGが採択された場合は、全国大会の企画セッションにおけるセッション名、セッションの概要はここで記載したものを原則そのまま記載して、研究活性化委員会に別途提出していただきます。"}
                     十分に推敲の上、記入してください。
                   </p>
                 </div>
@@ -890,10 +1272,10 @@ const App = () => {
                   }
                 >
                   <option value="">選択してください</option>
-                  {sessionOptions.map(
+                  {SESSION_OPTIONS.map(
                     (option) =>
                       formData.plannedSessions[option.key] && (
-                        <option key={option.key} value={option.label}>
+                        <option key={option.key} value={option.key}>
                           {option.label}
                         </option>
                       ),
@@ -971,7 +1353,7 @@ const App = () => {
               </div>
 
               {/* 全国大会選択時のみオーガナイザ入力欄を表示 */}
-              {formData.sessionDetails.target === "全国大会（2026年9月12～14日）" && (
+              {formData.sessionDetails.target === "national" && (
                 <div className="form-group">
                   <label>オーガナイザ</label>
                   <textarea
@@ -994,7 +1376,7 @@ const App = () => {
         {/* 8. 年間活動スケジュール */}
         <div className="section">
           <h2 className="section-title">
-            <span className="section-number">8</span>
+            <span className="section-number">{sectionNo.schedule}</span>
             年間活動スケジュール（4月～翌3月）
           </h2>
           <div className="table-container">
@@ -1044,6 +1426,85 @@ const App = () => {
           </button>
         </div>
 
+        {/* 予算案（継続かつ第一種・第一種見込みのみ） */}
+        {isFirstClassPlan && (
+          <div className="section">
+            <h2 className="section-title">
+              <span className="section-number">{sectionNo.budget}</span>
+              {FISCAL_YEAR}年度 予算案
+            </h2>
+            <div className="note" style={{ marginBottom: "15px" }}>
+              費目ごとに、金額（千円単位）と予算の根拠（何に・どのくらい使うか）を記入例のように簡単に記入してください。金額は概算で構いません。予算を必要としない費目は空欄のままにしてください。予算総額の上限は
+              {BUDGET_LIMIT / 10}万円（入力値で{BUDGET_LIMIT}
+              ）です。設備備品（PC、タブレット等）は対象外です。
+            </div>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: "30%" }}>費目</th>
+                    <th style={{ width: "170px" }}>金額</th>
+                    <th>予算の根拠</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {BUDGET_CATEGORIES.map((category) => (
+                    <tr key={category.key}>
+                      <td>
+                        <strong>{category.label}</strong>
+                        <div style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+                          {category.example}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={formData.budget[category.key].amount}
+                            onChange={(e) => updateBudget(category.key, "amount", e.target.value)}
+                            placeholder="0"
+                            maxLength="4"
+                            style={{ textAlign: "right" }}
+                          />
+                          <span style={{ whiteSpace: "nowrap", fontSize: "14px" }}>,000円</span>
+                        </div>
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={formData.budget[category.key].rationale}
+                          onChange={(e) => updateBudget(category.key, "rationale", e.target.value)}
+                          placeholder={category.rationaleExample}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td>
+                      <strong>合計</strong>
+                    </td>
+                    <td colSpan="2">
+                      <strong style={{ color: budgetTotal > BUDGET_LIMIT ? "#c33" : "inherit" }}>
+                        {(budgetTotal * 1000).toLocaleString()}円
+                      </strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {budgetTotal > BUDGET_LIMIT && (
+              <div
+                className="note"
+                style={{ background: "#fee", borderLeft: "4px solid #c33", color: "#c33" }}
+              >
+                予算総額が上限の{BUDGET_LIMIT / 10}万円（入力値で{BUDGET_LIMIT}
+                ）を超えています。上限以内に収めてください。
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 操作ボタン */}
         <div className="button-group">
           <button
@@ -1078,14 +1539,15 @@ const App = () => {
           </button>
         </div>
       </div>
+      )}
 
       {/* 印刷用コンテンツ（通常時は非表示） */}
       <div className="print-only" style={{ display: "none", padding: "20mm", fontFamily: "serif" }}>
         <div style={{ textAlign: "center", marginBottom: "30px" }}>
           <h1 style={{ fontSize: "18pt", marginBottom: "10px" }}>
-            教育システム情報学会 第二種SIG提案書
+            {documentTitle}
           </h1>
-          <p style={{ textAlign: "right", marginTop: "20px" }}>提案日：{formData.submissionDate}</p>
+          <p style={{ textAlign: "right", marginTop: "20px" }}>{dateLabel}：{formData.submissionDate}</p>
         </div>
 
         <div className="print-section">
@@ -1097,7 +1559,7 @@ const App = () => {
               marginBottom: "10px",
             }}
           >
-            1　SIGの名称
+            {sectionNo.name}　SIGの名称
           </h2>
           <table
             className="print-table"
@@ -1119,6 +1581,7 @@ const App = () => {
                   SIG-{formData.sigNameJa}
                 </td>
               </tr>
+              {!isContinuation && (
               <tr>
                 <td style={{ border: "1px solid #333", padding: "8px", background: "#f0f0f0" }}>
                   正式名称（英）
@@ -1127,6 +1590,7 @@ const App = () => {
                   SIG-{formData.sigNameEn}
                 </td>
               </tr>
+              )}
               <tr>
                 <td style={{ border: "1px solid #333", padding: "8px", background: "#f0f0f0" }}>
                   略称
@@ -1137,11 +1601,42 @@ const App = () => {
               </tr>
             </tbody>
           </table>
-          <p style={{ fontSize: "9pt", color: "#666" }}>
-            （注）正式名称はできる限り簡潔にしてください。また、略称はアルファベット2～5文字で設定してください。
-          </p>
+          {!isContinuation && (
+            <p style={{ fontSize: "9pt", color: "#666" }}>
+              （注）正式名称はできる限り簡潔にしてください。また、略称はアルファベット2～5文字で設定してください。
+            </p>
+          )}
         </div>
 
+        {isContinuation ? (
+          <>
+            <div className="print-section">
+              <h2 style={printHeadingStyle}>{sectionNo.submitter}　提出者（筆頭幹事）</h2>
+              <p>
+                {formData.leadSecretary.name}（{formData.leadSecretary.email}）
+              </p>
+            </div>
+
+            <div className="print-section">
+              <h2 style={printHeadingStyle}>
+                {sectionNo.sigClass}　SIGの種別
+              </h2>
+              <p>
+                （1）{FISCAL_YEAR}年度の種別:{" "}
+                <strong>
+                  {formData.nextYearClass
+                    ? `${formData.nextYearClass}SIG${isFirstClassPlan ? "（見込みを含む）" : ""}`
+                    : "（未選択）"}
+                </strong>
+              </p>
+              <p>
+                （2）{FISCAL_YEAR + 1}年度に第一種SIGとして活動することを:{" "}
+                <strong>{formData.firstClassPromotion || "（未選択）"}</strong>
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
         <div className="print-section">
           <h2
             style={{
@@ -1196,7 +1691,7 @@ const App = () => {
             </tbody>
           </table>
           <p style={{ fontSize: "9pt", color: "#666" }}>
-            （注）メンバーが複数いる場合は、適宜行を追加してください。メールアドレスは、筆頭幹事および幹事のみで構いません。
+            （注）運営委員が複数いる場合は、適宜行を追加してください。メールアドレスは、筆頭幹事および幹事のみで構いません。
           </p>
         </div>
 
@@ -1263,15 +1758,20 @@ const App = () => {
               marginBottom: "10px",
             }}
           >
-            6　今回提案する2026年度の次の年度（2027年度）から第一種SIGとして活動することを希望しますか？
+            6　今回提案する{FISCAL_YEAR}年度の次の年度（{FISCAL_YEAR + 1}
+            年度）から第一種SIGとして活動することを希望しますか？
           </h2>
           <p style={{ marginBottom: "10px", fontSize: "10pt", color: "#666" }}>
-            ※希望する場合は、2026年度内に、全国大会における企画セッションを企画・実施し、かつ研究会における企画セッションを2回以上企画・実施する必要があります。
+            ※希望する場合は、{FISCAL_YEAR}
+            年度内に、全国大会における企画セッションを企画・実施し、かつ研究会における企画セッションを2回以上企画・実施する必要があります。
           </p>
           <p style={{ fontWeight: "bold", marginTop: "10px" }}>
             回答: {formData.firstClassPromotion || "（未選択）"}
           </p>
         </div>
+
+          </>
+        )}
 
         <div className="print-section">
           <h2
@@ -1282,18 +1782,11 @@ const App = () => {
               marginBottom: "10px",
             }}
           >
-            7　企画セッション実施予定
+            {sectionNo.sessions}　企画セッション実施予定
           </h2>
           <p style={{ marginBottom: "10px" }}>
-            {[
-              formData.plannedSessions.spring && "春季研究会（2026年5月頃予定）",
-              formData.plannedSessions.summer && "夏季研究会（2026年7月頃予定）",
-              formData.plannedSessions.national && "全国大会（2026年9月12～14日）",
-              formData.plannedSessions.autumn && "秋季研究会（2026年11月頃予定）",
-              formData.plannedSessions.winter && "冬季研究会（2027年1月頃予定）",
-              formData.plannedSessions.special && "特別研究会（2027年3月頃予定）",
-            ]
-              .filter(Boolean)
+            {SESSION_OPTIONS.filter((option) => formData.plannedSessions[option.key])
+              .map((option) => option.label)
               .join("、")}
           </p>
           {formData.sessionDetails.target && (
@@ -1307,7 +1800,7 @@ const App = () => {
             >
               <h3 style={{ fontSize: "12pt", marginBottom: "10px" }}>企画セッション詳細</h3>
               <p>
-                <strong>実施:</strong> {formData.sessionDetails.target}
+                <strong>実施:</strong> {getSessionLabel(formData.sessionDetails.target)}
               </p>
               <p>
                 <strong>セッション名:</strong> SIG-{formData.sigAbbreviation}：
@@ -1322,7 +1815,7 @@ const App = () => {
               <p>
                 <strong>発表者:</strong> {formData.sessionDetails.presenters}
               </p>
-              {formData.sessionDetails.target === "全国大会（2026年9月12～14日）" &&
+              {formData.sessionDetails.target === "national" &&
                 formData.sessionDetails.organizers && (
                   <p>
                     <strong>オーガナイザ:</strong> {formData.sessionDetails.organizers}
@@ -1341,7 +1834,7 @@ const App = () => {
               marginBottom: "10px",
             }}
           >
-            8　年間活動スケジュール（4月～翌3月）
+            {sectionNo.schedule}　年間活動スケジュール（4月～翌3月）
           </h2>
           <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
             <tbody>
@@ -1365,6 +1858,54 @@ const App = () => {
             </tbody>
           </table>
         </div>
+
+        {isFirstClassPlan && (
+          <div className="print-section">
+            <h2 style={printHeadingStyle}>
+              {sectionNo.budget}　{FISCAL_YEAR}年度 予算案
+            </h2>
+            <table className="print-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f0f0f0" }}>
+                  <th style={{ border: "1px solid #333", padding: "8px", width: "20%" }}>費目</th>
+                  <th style={{ border: "1px solid #333", padding: "8px", width: "20%" }}>金額</th>
+                  <th style={{ border: "1px solid #333", padding: "8px" }}>予算の根拠</th>
+                </tr>
+              </thead>
+              <tbody>
+                {BUDGET_CATEGORIES.map((category) => (
+                  <tr key={category.key}>
+                    <td style={{ border: "1px solid #333", padding: "8px" }}>{category.label}</td>
+                    <td style={{ border: "1px solid #333", padding: "8px", textAlign: "right" }}>
+                      {((parseInt(formData.budget[category.key].amount, 10) || 0) * 1000).toLocaleString()}
+                      円
+                    </td>
+                    <td style={{ border: "1px solid #333", padding: "8px" }}>
+                      {formData.budget[category.key].rationale}
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ border: "1px solid #333", padding: "8px", background: "#f0f0f0" }}>
+                    合計
+                  </td>
+                  <td
+                    style={{
+                      border: "1px solid #333",
+                      padding: "8px",
+                      textAlign: "right",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {(budgetTotal * 1000).toLocaleString()}円
+                  </td>
+                  <td style={{ border: "1px solid #333", padding: "8px" }}></td>
+                </tr>
+              </tbody>
+            </table>
+            <p style={{ fontSize: "9pt", color: "#666", marginTop: "5px" }}>（注）金額は概算です。</p>
+          </div>
+        )}
 
         <p style={{ textAlign: "right", marginTop: "40px" }}>以上</p>
       </div>
