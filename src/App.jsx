@@ -854,7 +854,7 @@ const App = () => {
                   const value = e.target.value.replace(/[^A-Za-z]/g, "");
                   handleInputChange("sigAbbreviation", value);
                 }}
-                placeholder="EISE"
+                placeholder="ISE"
                 maxLength="5"
                 pattern="[A-Za-z]{2,5}"
                 title="半角アルファベット2～5文字で入力してください"
