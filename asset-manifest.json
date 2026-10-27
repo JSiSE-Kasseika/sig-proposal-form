@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/sig-proposal-form/static/css/main.33095838.css",
-    "main.js": "/sig-proposal-form/static/js/main.bdccb9b4.js",
+    "main.js": "/sig-proposal-form/static/js/main.570ab8dc.js",
     "index.html": "/sig-proposal-form/index.html",
     "main.33095838.css.map": "/sig-proposal-form/static/css/main.33095838.css.map",
-    "main.bdccb9b4.js.map": "/sig-proposal-form/static/js/main.bdccb9b4.js.map"
+    "main.570ab8dc.js.map": "/sig-proposal-form/static/js/main.570ab8dc.js.map"
   },
   "entrypoints": [
     "static/css/main.33095838.css",
-    "static/js/main.bdccb9b4.js"
+    "static/js/main.570ab8dc.js"
   ]
 }
