@@ -1214,7 +1214,6 @@ const App = () => {
           </h2>
           <div className="note" style={{ marginBottom: "15px" }}>
             現時点の想定を回答してください。複数回予定している場合はすべて選択してください。
-            ※研究会は2026年度から全5回の開催となります。開催月は現時点の見込みであり、今後変更になる可能性があります。
           </div>
           <div className="checkbox-group">
             {SESSION_OPTIONS.map((option) => (
