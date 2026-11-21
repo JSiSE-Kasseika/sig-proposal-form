@@ -25,43 +25,57 @@ const EXISTING_SIGS = [
   { abbreviation: "SLAM", nameJa: "認知スキーマ・学習活動モデリング" },
 ];
 
-// 予算案の費目
+// 予算案の費目（「SIGおよび部会の活動費用の交付および執行に関する細則（案）」第4条）
 const BUDGET_CATEGORIES = [
   {
-    key: "meeting",
-    label: "会議費",
-    example: "会場利用料、貸会議室利用料など",
-    rationaleExample: "例：公開ワークショップの会場利用料（半日×1回）",
-  },
-  {
     key: "honorarium",
-    label: "謝金",
-    example: "講師への謝金など（交通費・宿泊費を含む）※JSiSE会員への謝金支払いは不可",
-    rationaleExample: "例：招待講演の講師謝金（非会員1名、交通費を含む）",
+    label: "講師謝金",
+    example:
+      "研究会・講演会・ワークショップ等で講演または指導を行う講師への謝金 ※本学会会員への謝金は原則不可",
+    rationaleExample: "例：招待講演の講師謝金（非会員1名）",
   },
   {
-    key: "travel",
-    label: "旅費交通費",
-    example: "調査のための交通費・宿泊費（日当はなし）※全国大会や研究会への旅費交通費は不可",
-    rationaleExample: "例：先進事例の訪問調査の交通費・宿泊費（2名×1回）",
+    key: "lecturerTravel",
+    label: "講師旅費",
+    example: "上記の講師の交通費・宿泊費",
+    rationaleExample: "例：招待講師の往復交通費・宿泊費（1名×1泊）",
   },
   {
-    key: "communication",
-    label: "通信運搬費",
-    example: "郵送料など",
-    rationaleExample: "例：ワークショップ資料・機材の郵送料（2回分）",
+    key: "venue",
+    label: "会場費",
+    example: "研究会・講演会・ワークショップ等の会場使用料、会場付帯設備の一時利用料",
+    rationaleExample: "例：公開ワークショップの会場使用料（半日×1回）",
   },
   {
     key: "supplies",
     label: "消耗品費",
-    example: "消耗品",
+    example: "用紙、筆記具、印刷用資材など、使用に伴い消費されるもの",
     rationaleExample: "例：ワークショップ用の付箋・模造紙・印刷用紙",
   },
   {
-    key: "misc",
-    label: "雑費",
-    example: "上の費目に含まれないもの",
-    rationaleExample: "例：謝金の振込手数料",
+    key: "communication",
+    label: "通信費",
+    example: "文書・資料等の郵送・発送",
+    rationaleExample: "例：ワークショップ資料の郵送料（2回分）",
+  },
+  {
+    key: "materials",
+    label: "資料費",
+    example: "学術雑誌の記事・論文、電子資料の閲覧・購入（オンラインを含む）",
+    rationaleExample: "例：関連論文のオンライン購入（5本程度）",
+  },
+  {
+    key: "license",
+    label: "ライセンス／システム使用料",
+    example:
+      "利用期間を定めたソフトウェアのライセンス料、Web会議システム・クラウドサービス等の使用料",
+    rationaleExample: "例：Web会議システムの年間使用料",
+  },
+  {
+    key: "sponsorship",
+    label: "協賛金",
+    example: "他の研究組織が主催する研究会・シンポジウム等への協賛（寄付を目的とするものは不可）",
+    rationaleExample: "例：関連学会のシンポジウムへの協賛",
   },
 ];
 
@@ -657,6 +671,24 @@ const App = () => {
     );
   };
 
+  // 年度の強調表示（継続の種別欄で、対象の年度を見分けやすくする）
+  const yearColors = { [FISCAL_YEAR]: "#1565c0", [FISCAL_YEAR + 1]: "#2e7d32" };
+  const renderYear = (year) => (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "0 6px",
+        margin: "0 2px",
+        borderRadius: "4px",
+        background: yearColors[year] || "#666",
+        color: "#fff",
+        fontWeight: "bold",
+      }}
+    >
+      {year}年度
+    </span>
+  );
+
   const printHeadingStyle = {
     fontSize: "14pt",
     borderBottom: "2px solid #333",
@@ -1109,14 +1141,47 @@ const App = () => {
               SIGの種別
             </h2>
             <div className="note" style={{ marginBottom: "15px" }}>
-              SIGの種別は、前年度の活動実績で決まります。{FISCAL_YEAR}年度の種別は{FISCAL_YEAR - 1}
-              年度の実績で、{FISCAL_YEAR + 1}年度の種別は{FISCAL_YEAR}
-              年度の実績（この計画書の内容）で決まるため、2つの年度についてそれぞれ回答してください。
+              SIGの種別は<strong>前年度の活動実績</strong>
+              で決まります。下の2つの設問は<strong>対象の年度が異なる</strong>
+              ので、年度をよく確認して回答してください。
+            </div>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>設問</th>
+                    <th>対象の年度</th>
+                    <th>何で決まるか</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>（1）種別</td>
+                    <td>{renderYear(FISCAL_YEAR)}</td>
+                    <td>{renderYear(FISCAL_YEAR - 1)}の実績</td>
+                  </tr>
+                  <tr>
+                    <td>（2）第一種SIGの希望</td>
+                    <td>{renderYear(FISCAL_YEAR + 1)}</td>
+                    <td>
+                      {renderYear(FISCAL_YEAR)}の実績（この計画書の企画セッション）
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
-            <div className="form-group">
+            <div
+              className="form-group"
+              style={{
+                border: `2px solid ${yearColors[FISCAL_YEAR]}`,
+                borderRadius: "8px",
+                padding: "15px",
+              }}
+            >
               <label>
-                （1）{FISCAL_YEAR}年度の種別（{FISCAL_YEAR - 1}年度の実績で決まります）
+                （1）{renderYear(FISCAL_YEAR)}の種別（{renderYear(FISCAL_YEAR - 1)}
+                の実績で決まります）
               </label>
               <div className="note" style={{ marginBottom: "10px" }}>
                 {FISCAL_YEAR - 1}
@@ -1140,10 +1205,18 @@ const App = () => {
               )}
             </div>
 
-            <div className="form-group">
+            <div
+              className="form-group"
+              style={{
+                border: `2px solid ${yearColors[FISCAL_YEAR + 1]}`,
+                borderRadius: "8px",
+                padding: "15px",
+              }}
+            >
               <label>
-                （2）{FISCAL_YEAR + 1}年度に第一種SIGとして活動することを希望しますか？（
-                {FISCAL_YEAR}年度の実績で決まります）
+                （2）{renderYear(FISCAL_YEAR + 1)}
+                に第一種SIGとして活動することを希望しますか？（{renderYear(FISCAL_YEAR)}
+                の実績で決まります）
               </label>
               <div className="note" style={{ marginBottom: "10px" }}>
                 希望する場合は、{FISCAL_YEAR}
@@ -1435,7 +1508,7 @@ const App = () => {
             <div className="note" style={{ marginBottom: "15px" }}>
               費目ごとに、金額（千円単位）と予算の根拠（何に・どのくらい使うか）を記入例のように簡単に記入してください。金額は概算で構いません。予算を必要としない費目は空欄のままにしてください。予算総額の上限は
               {BUDGET_LIMIT / 10}万円（入力値で{BUDGET_LIMIT}
-              ）です。設備備品（PC、タブレット等）は対象外です。
+              ）です。上記以外の費目には支出できません。また、機器・装置・備品など繰り返し使用する物品（PC、タブレット等）は、金額にかかわらず対象外です。
             </div>
             <div className="table-container">
               <table>
